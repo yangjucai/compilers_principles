@@ -1,8 +1,19 @@
 import java.util.*;
 
+enum Status {
+    NOSEARCH, SEARCHING, SEARCHED
+}
+class Pair
+{
+    // Return a map entry (key-value pair) from the specified values
+    public static <T, U> Map.Entry<T, U> of(T first, U second) {
+        return new AbstractMap.SimpleEntry<>(first, second);
+    }
+}
+
 public class Java_LRParserAnalysis
 {
-    private static HashMap<String, String[]> rule;
+    private static ArrayList<Map.Entry<String,String>> productions;
     private static HashMap<String, HashSet<String>> first;
     private static HashSet<String> endChars;
     private static HashSet<String> nonEndChars;
@@ -18,6 +29,9 @@ public class Java_LRParserAnalysis
     private static HashMap<String, Status> status;
 
     private static ArrayList<Map.Entry<String,Integer>> prog = new ArrayList<>();
+    private static HashMap<Map.Entry<Integer,String>,Map.Entry<String,Integer>> actionTable = new HashMap<>();
+    private static HashMap<Map.Entry<Integer,String>,Integer> gotoTable = new HashMap<>();
+    private static ArrayList<SetOfItems> C = new ArrayList<>();
     private static int statusCnt = 0;
     static class Item{
         //项 [left -> beforeDot · nonTerminal afterNonTerminal, lookAhead]
@@ -48,28 +62,27 @@ public class Java_LRParserAnalysis
     }
 
     static class SetOfItems{
-        private static Deque<Item> items;
-        private static int statusNum;
-        private static HashMap<String,Integer> GOTO;
-
+        public Deque<Item> items;
+        public HashMap<String,Integer> GOTO;
+        public int statusNum;
         public SetOfItems(Deque<Item> items, int statusNum) {
             this.items = items;
             this.statusNum = statusNum;
-            this.GOTO = new HashMap<>();
+            GOTO = new HashMap<>();
         }
 
         public SetOfItems() {
             this.items = new ArrayDeque<>();
             this.statusNum = 0;
-            this.GOTO = new HashMap<>();
-        }
-
-        public void setStatusNum(int statusNum) {
-            this.statusNum = statusNum;
+            GOTO = new HashMap<>();
         }
 
         public void setGOTO(String X, int nextStatus){
             this.GOTO.put(X,nextStatus);
+        }
+
+        public void setStatusNum(int statusNum) {
+            this.statusNum = statusNum;
         }
 
         @Override
@@ -108,19 +121,23 @@ public class Java_LRParserAnalysis
                 String nonTerminal = nonEndChars.contains(afterDotSubs[0])?afterDotSubs[0] :"";
                 if(nonTerminal != ""){
                     //遍历G'中item.nonTerminal -> rights
-                    for(String right:rule.get(nonTerminal)){
-                        //遍历FIRST(afterNonTerminal lookAhead)中的每一个终结符terminal
-                        String afterNonTerminal = "";
-                        for(int i=1;i< afterDotSubs.length;i++){
-                            afterNonTerminal = afterNonTerminal + " " + afterDotSubs[i];
+                    for(Map.Entry<String,String> production:productions){
+                        if(production.getKey().equals(nonTerminal)){
+                            String right = production.getValue();
+                            //遍历FIRST(afterNonTerminal lookAhead)中的每一个终结符terminal
+                            String afterNonTerminal = "";
+                            for(int i=1;i< afterDotSubs.length;i++){
+                                afterNonTerminal = afterNonTerminal + " " + afterDotSubs[i];
+                            }
+                            HashSet<String> first = get_rightItems_first(afterNonTerminal+" "+item.lookAhead);
+                            String left = nonTerminal;
+                            String beforeDot = "";
+                            String afterDot = right;
+                            for(String terminal:first){
+                                I.addItem(new Item(left,beforeDot,afterDot,terminal));
+                            }
                         }
-                        HashSet<String> first = get_rightItems_first(afterNonTerminal+" "+item.lookAhead);
-                        String left = nonTerminal;
-                        String beforeDot = "";
-                        String afterDot = right;
-                        for(String terminal:first){
-                            I.addItem(new Item(left,beforeDot,afterDot,terminal));
-                        }
+
                     }
                 }
             }
@@ -140,7 +157,7 @@ public class Java_LRParserAnalysis
                 String lookAhead0 = item.lookAhead;
                 if(afterDotSubs.length>0){
                     String nextChar = afterDotSubs[0];
-                    beforeDot0 = item.beforeDot+" "+nextChar;
+                    beforeDot0 = (item.beforeDot+" "+nextChar).trim();
                     for(int i=1;i< afterDotSubs.length;i++){
                         afterDot0 = afterDot0+" "+afterDotSubs[i];
                     }
@@ -156,8 +173,6 @@ public class Java_LRParserAnalysis
     }
 
     private static void initIterms(){
-        ArrayList<SetOfItems> C = new ArrayList<>();
-
         SetOfItems initStatus = new SetOfItems();
         initStatus.addItem(new Item("program'","","program","$"));
         initStatus = CLOSURE(initStatus);
@@ -174,17 +189,37 @@ public class Java_LRParserAnalysis
                     if(X.equals("E"))
                         continue;
                     SetOfItems NextI = GOTO(I,X);
-                    if(NextI.items.size() != 0 && !C.contains(NextI)){
+                    if(C.contains(NextI)){
+                        int nextStatus = 0;
+                        for(SetOfItems item:C){
+                            if(item.equals(NextI)){
+                                nextStatus = item.statusNum;
+                                break;
+                            }
+                        }
+                        C.get(I.statusNum).setGOTO(X,nextStatus);
+                    }
+                    else if(NextI.items.size() != 0){
                         NextI.setStatusNum(statusCnt++);
-                        I.setGOTO(X,statusCnt-1);
+                        C.get(I.statusNum).setGOTO(X,statusCnt-1);
                         C.add(NextI);
                     }
                 }
                 for(String X:nonEndChars){
                     SetOfItems NextI = GOTO(I,X);
-                    if(NextI.items.size() != 0 && !C.contains(NextI)){
+                    if(C.contains(NextI)){
+                        int nextStatus = 0;
+                        for(SetOfItems item:C){
+                            if(item.equals(NextI)){
+                                nextStatus = item.statusNum;
+                                break;
+                            }
+                        }
+                        C.get(I.statusNum).setGOTO(X,nextStatus);
+                    }
+                    else if(NextI.items.size() != 0){
                         NextI.setStatusNum(statusCnt++);
-                        I.setGOTO(X,statusCnt-1);
+                        C.get(I.statusNum).setGOTO(X,statusCnt-1);
                         C.add(NextI);
                     }
                 }
@@ -192,6 +227,11 @@ public class Java_LRParserAnalysis
         }
         for(SetOfItems closure:C){
             System.out.print(closure.statusNum+" ");
+
+            closure.GOTO.forEach((key,value)->{
+                System.out.print(key+"->"+value+" ");
+            });
+            System.out.print(" ");
             System.out.print(closure.items.size()+"个 ");
             for(Item item:closure.items){
                 System.out.print("["+item.left+" -> "+item.beforeDot+"."+item.afterDot+", "+item.lookAhead+"]; ");
@@ -202,25 +242,40 @@ public class Java_LRParserAnalysis
     }
     private static void init_data() {
 
-        //init rule
-        rule = new HashMap<>();
-        rule.put("program'",new String[]{"program"});
-        rule.put("program", new String[]{"compoundstmt"});
-        rule.put("stmt", new String[]{"ifstmt", "whilestmt", "assgstmt", "compoundstmt"});
-        rule.put("compoundstmt", new String[]{"{ stmts }"});
-        rule.put("stmts", new String[]{"stmt stmts", "E"});
-        rule.put("ifstmt", new String[]{"if ( boolexpr ) then stmt else stmt"});
-        rule.put("whilestmt", new String[]{"while ( boolexpr ) stmt"});
-        rule.put("assgstmt", new String[]{"ID = arithexpr ;"});
-        rule.put("boolexpr", new String[]{"arithexpr boolop arithexpr"});
-        rule.put("boolop", new String[]{"<", ">", "<=", ">=", "=="});
-        rule.put("arithexpr", new String[]{"multexpr arithexprprime"});
-        rule.put("arithexprprime", new String[]{"+ multexpr arithexprprime", "- multexpr arithexprprime", "E"});
-        rule.put("multexpr", new String[]{"simpleexpr multexprprime"});
-        rule.put("multexprprime", new String[]{"* simpleexpr multexprprime", "/ simpleexpr multexprprime", "E"});
-        rule.put("simpleexpr", new String[]{"ID", "NUM", "( arithexpr )"});
+        //init production
+        productions = new ArrayList<>();
+        productions.add(Pair.of("program'","program"));
+        productions.add(Pair.of("program","compoundstmt"));
+        productions.add(Pair.of("stmt","ifstmt"));
+        productions.add(Pair.of("stmt","whilestmt"));
+        productions.add(Pair.of("stmt","assgstmt"));
+        productions.add(Pair.of("stmt","compoundstmt"));
+        productions.add(Pair.of("compoundstmt","{ stmts }"));
+        productions.add(Pair.of("stmts","stmt stmts"));
+        productions.add(Pair.of("stmts","E"));
+        productions.add(Pair.of("ifstmt","if ( boolexpr ) then stmt else stmt"));
+        productions.add(Pair.of("whilestmt","while ( boolexpr ) stmt"));
+        productions.add(Pair.of("assgstmt","ID = arithexpr ;"));
+        productions.add(Pair.of("boolexpr","arithexpr boolop arithexpr"));
+        productions.add(Pair.of("boolop","<"));
+        productions.add(Pair.of("boolop",">"));
+        productions.add(Pair.of("boolop","<="));
+        productions.add(Pair.of("boolop",">="));
+        productions.add(Pair.of("boolop","=="));
+        productions.add(Pair.of("arithexpr","multexpr arithexprprime"));
+        productions.add(Pair.of("arithexprprime","+ multexpr arithexprprime"));
+        productions.add(Pair.of("arithexprprime","- multexpr arithexprprime"));
+        productions.add(Pair.of("arithexprprime","E"));
+        productions.add(Pair.of("multexpr","simpleexpr multexprprime"));
+        productions.add(Pair.of("multexprprime","* simpleexpr multexprprime"));
+        productions.add(Pair.of("multexprprime","/ simpleexpr multexprprime"));
+        productions.add(Pair.of("multexprprime","E"));
+        productions.add(Pair.of("simpleexpr","ID"));
+        productions.add(Pair.of("simpleexpr","NUM"));
+        productions.add(Pair.of("simpleexpr","( arithexpr )"));
 
-        //init start
+
+        //init start 增广之前的start
         start = "program";
 
         //init terminal
@@ -268,11 +323,50 @@ public class Java_LRParserAnalysis
 
         //init first
         first = new HashMap<>();
-        get_first();
+        getFirst();
 
+        //init items
+        initIterms();
+
+        //get table
+        getTable();
+
+        System.out.println(actionTable.toString()+ gotoTable.toString());
     }
 
-    private static HashSet<String> FIRSTx(String x) {
+    private static void getTable(){
+        for(SetOfItems items:C){
+            for(Item item:items.items){
+                if(item.afterDot.equals("")){
+                    //接受 accept
+                    if(item.beforeDot.equals(start)){
+                        actionTable.put(Pair.of(items.statusNum, item.lookAhead),Pair.of("acc",0));
+                    }
+                    //规约 reduction
+                    else{
+                        int productionNum = 0;
+                        for(int i=0;i<productions.size();i++){
+                            if(productions.get(i).getKey().equals(item.left) && productions.get(i).getValue().equals(item.beforeDot)){
+                                productionNum = i;
+                                break;
+                            }
+                        }
+                        actionTable.put(Pair.of(items.statusNum, item.lookAhead),Pair.of("r",productionNum));
+                    }
+                }
+                else{
+                    String[] afterDotSubs = item.afterDot.trim().split(" ");
+                    if(endChars.contains(afterDotSubs[0]) && items.GOTO.get(afterDotSubs[0]) != null){
+                        int nextStatus = items.GOTO.get(afterDotSubs[0]);
+                        actionTable.put(Pair.of(items.statusNum, afterDotSubs[0]),Pair.of("s",nextStatus));
+                    }
+                }
+
+            }
+        }
+    }
+
+    private static HashSet<String> firstx(String x) {
         HashSet<String> first = new HashSet<>();
 
         //x是终结符，其中E也在终结符里面
@@ -281,45 +375,45 @@ public class Java_LRParserAnalysis
             return first;
         } else {
             //右部各符号FIRST集相加
-            String[] rightItems = rule.get(x);
-            for (String rightItem : rightItems) {
-                String[] rightItemString = rightItem.split(" ");
-
-                if (rightItemString.length == 1) {
-                    first.addAll(FIRSTx(rightItemString[0]));
-                } else {
-                    for (int i = 0; i < rightItemString.length; i++) {
-                        String rightItemSub = rightItemString[i];
-                        if (endChars.contains(rightItemSub)) {
-                            first.add(rightItemSub);
-                            break;
-                        } else {
-                            HashSet<String> rightItemFirst = FIRSTx(rightItemSub);
-                            //包含空
-                            if (rightItemFirst.contains("E")) {
-                                //rightItem是最后一个符号，把空加入FIRST集
-                                if (i == rightItemString.length - 1) {
-                                    first.addAll(rightItemFirst);
-                                } else {
-                                    rightItemFirst.remove("E");
-                                    first.addAll(rightItemFirst);
-                                }
-                            }
-                            //不包含空
-                            else {
-                                first.addAll(rightItemFirst);
+            for (Map.Entry<String,String> production:productions) {
+                if(production.getKey().equals(x)){
+                    String rightItem = production.getValue();
+                    String[] rightItemString = rightItem.split(" ");
+                    if (rightItemString.length == 1) {
+                        first.addAll(firstx(rightItemString[0]));
+                    } else {
+                        for (int i = 0; i < rightItemString.length; i++) {
+                            String rightItemSub = rightItemString[i];
+                            if (endChars.contains(rightItemSub)) {
+                                first.add(rightItemSub);
                                 break;
+                            } else {
+                                HashSet<String> rightItemFirst = firstx(rightItemSub);
+                                //包含空
+                                if (rightItemFirst.contains("E")) {
+                                    //rightItem是最后一个符号，把空加入FIRST集
+                                    if (i == rightItemString.length - 1) {
+                                        first.addAll(rightItemFirst);
+                                    } else {
+                                        rightItemFirst.remove("E");
+                                        first.addAll(rightItemFirst);
+                                    }
+                                }
+                                //不包含空
+                                else {
+                                    first.addAll(rightItemFirst);
+                                    break;
+                                }
                             }
                         }
                     }
                 }
             }
-
         }
         return first;
     }
 
-    private static void get_first() {
+    private static void getFirst() {
         //init first
         //终结符的FIRST集就是本身
         for (String endChar : endChars) {
@@ -334,7 +428,7 @@ public class Java_LRParserAnalysis
 
         //遍历非终结符
         for (String nonEndChar : nonEndChars) {
-            first.put(nonEndChar, FIRSTx(nonEndChar));
+            first.put(nonEndChar, firstx(nonEndChar));
         }
     }
 
@@ -393,7 +487,7 @@ public class Java_LRParserAnalysis
      */
     private static void analysis()
     {
-        initIterms();
+
     }
 
     /**
