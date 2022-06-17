@@ -1,17 +1,17 @@
 import java.util.*;
 
-enum Status {
-    NOSEARCH, SEARCHING, SEARCHED
-}
-class Pair
-{
-    // Return a map entry (key-value pair) from the specified values
-    public static <T, U> Map.Entry<T, U> of(T first, U second) {
-        return new AbstractMap.SimpleEntry<>(first, second);
-    }
-}
+//enum Status {
+//    NOSEARCH, SEARCHING, SEARCHED
+//}
+//class Pair
+//{
+//    // Return a map entry (key-value pair) from the specified values
+//    public static <T, U> Map.Entry<T, U> of(T first, U second) {
+//        return new AbstractMap.SimpleEntry<>(first, second);
+//    }
+//}
 
-public class Java_LRParserAnalysis
+public class Java_TranslationSchemaAnalysis
 {
     private static ArrayList<Map.Entry<String,String>> productions;
     private static HashMap<String, HashSet<String>> first;
@@ -19,11 +19,30 @@ public class Java_LRParserAnalysis
     private static HashSet<String> nonEndChars;
     private static String start;
 
-    private static ArrayList<Map.Entry<String,Integer>> prog = new ArrayList<>();
+    private static ArrayList<Integer> prog = new ArrayList<>();
+    private static ArrayList<Integer> symbolProduced = new ArrayList<>();
     private static HashMap<Map.Entry<Integer,String>,Map.Entry<String,Integer>> actionTable = new HashMap<>();
     private static HashMap<Map.Entry<Integer,String>,Integer> gotoTable = new HashMap<>();
     private static ArrayList<SetOfItems> collection = new ArrayList<>();
+    private static ArrayList<Lexical> lexicals = new ArrayList<>();
+    private static int lexicalCnt = 0;
     private static int statusCnt = 0;
+
+    static class Lexical{
+        private String name;
+        private String identifier;
+        private int lineNum;
+        private String type;
+        private Float value;
+
+        public Lexical(String name, String identifier, int lineNum, String type, Float value) {
+            this.name = name;
+            this.identifier = identifier;
+            this.lineNum = lineNum;
+            this.type = type;
+            this.value = value;
+        }
+    }
     static class Item{
         //item [left -> beforeDot · nonTerminal afterNonTerminal, lookAhead]
         private String left;
@@ -158,7 +177,6 @@ public class Java_LRParserAnalysis
         return CLOSURE(J);
     }
 
-    @SuppressWarnings( " unchecked " )
     private static void initIterms(){
         SetOfItems initStatus = new SetOfItems();
         initStatus.addItem(new Item("program'","","program","$"));
@@ -235,7 +253,8 @@ public class Java_LRParserAnalysis
 
         //init input
         read_prog();
-        prog.add(Pair.of("$",0));
+        lexicals.add(new Lexical("$","$",-1,"other",Float.MAX_VALUE));
+        prog.add(lexicalCnt++);
 
         //init production
         getProduction();
@@ -280,11 +299,12 @@ public class Java_LRParserAnalysis
     private static void getNonTernimal(){
         nonEndChars = new HashSet<>();
         nonEndChars.add("program");
+        nonEndChars.add("decls");
+        nonEndChars.add("decl");
         nonEndChars.add("stmt");
         nonEndChars.add("compoundstmt");
         nonEndChars.add("stmts");
         nonEndChars.add("ifstmt");
-        nonEndChars.add("whilestmt");
         nonEndChars.add("assgstmt");
         nonEndChars.add("boolexpr");
         nonEndChars.add("boolop");
@@ -303,7 +323,6 @@ public class Java_LRParserAnalysis
         endChars.add(")");
         endChars.add("then");
         endChars.add("else");
-        endChars.add("while");
         endChars.add("ID");
         endChars.add("=");
         endChars.add(">");
@@ -315,23 +334,28 @@ public class Java_LRParserAnalysis
         endChars.add("-");
         endChars.add("*");
         endChars.add("/");
-        endChars.add("NUM");
+        endChars.add("INTNUM");
+        endChars.add("REALNUM");
+        endChars.add("int");
+        endChars.add("real");
         endChars.add("E");
         endChars.add(";");
     }
     private static void getProduction(){
         productions = new ArrayList<>();
         productions.add(Pair.of("program'","program"));
-        productions.add(Pair.of("program","compoundstmt"));
+        productions.add(Pair.of("program","decls compoundstmt"));
+        productions.add(Pair.of("decls","decl ; decls"));
+        productions.add(Pair.of("decls","E"));
+        productions.add(Pair.of("decl","int ID = INTNUM"));
+        productions.add(Pair.of("decl","real ID = REALNUM"));
         productions.add(Pair.of("stmt","ifstmt"));
-        productions.add(Pair.of("stmt","whilestmt"));
         productions.add(Pair.of("stmt","assgstmt"));
         productions.add(Pair.of("stmt","compoundstmt"));
         productions.add(Pair.of("compoundstmt","{ stmts }"));
         productions.add(Pair.of("stmts","stmt stmts"));
         productions.add(Pair.of("stmts","E"));
         productions.add(Pair.of("ifstmt","if ( boolexpr ) then stmt else stmt"));
-        productions.add(Pair.of("whilestmt","while ( boolexpr ) stmt"));
         productions.add(Pair.of("assgstmt","ID = arithexpr ;"));
         productions.add(Pair.of("boolexpr","arithexpr boolop arithexpr"));
         productions.add(Pair.of("boolop","<"));
@@ -348,12 +372,13 @@ public class Java_LRParserAnalysis
         productions.add(Pair.of("multexprprime","/ simpleexpr multexprprime"));
         productions.add(Pair.of("multexprprime","E"));
         productions.add(Pair.of("simpleexpr","ID"));
-        productions.add(Pair.of("simpleexpr","NUM"));
+        productions.add(Pair.of("simpleexpr","INTNUM"));
+        productions.add(Pair.of("simpleexpr","REALNUM"));
         productions.add(Pair.of("simpleexpr","( arithexpr )"));
 
-        productions.forEach(production->{
-            System.out.println(production.getKey()+" -> "+production.getValue());
-        });
+        for (int i = 0; i < productions.size(); i++) {
+            System.out.println(i+" "+productions.get(i).getKey()+" -> "+productions.get(i).getValue());
+        }
     }
 
     private static void getTable(){
@@ -522,7 +547,28 @@ public class Java_LRParserAnalysis
             for(String Char:tmp){
                 if(Char.equals(""))
                     continue;
-                prog.add(Pair.of(Char,lineNum));
+                boolean notExist = true;
+                for (int i = 0; i < lexicals.size(); i++) {
+                    if(lexicals.get(i).identifier.equals(Char)){
+                        notExist = false;
+                        prog.add(i);
+                    }
+                }
+                if(notExist){
+                    if(Char.matches("^[a-z]$")){
+                        lexicals.add(new Lexical("ID",Char,lineNum,"INTNUMorREALNUM",Float.MAX_VALUE));
+                    }
+                    else if(Char.matches("^[0-9]+.[0-9]+$")){
+                        lexicals.add(new Lexical("REALNUM",Char,lineNum,"REALNUM",Float.parseFloat(Char)));
+                    }
+                    else if(Char.matches("^[0-9]+$")){
+                        lexicals.add(new Lexical("INTNUM",Char,lineNum,"INTNUM",Float.parseFloat(Char)));
+                    }
+                    else{
+                        lexicals.add(new Lexical(Char,Char,lineNum,"other",Float.MAX_VALUE));
+                    }
+                    prog.add(lexicalCnt++);
+                }
             }
             lineNum ++;
         }
@@ -544,19 +590,29 @@ public class Java_LRParserAnalysis
         stack.push(collection.get(0));
         while(true){
             SetOfItems peek = stack.peek();
-            String actionKey = actionTable.get(Pair.of(peek.statusNum,prog.get(0).getKey())) == null?null:actionTable.get(Pair.of(peek.statusNum,prog.get(0).getKey())).getKey();
-            int actionValue = actionTable.get(Pair.of(peek.statusNum,prog.get(0).getKey())) == null?-1:actionTable.get(Pair.of(peek.statusNum,prog.get(0).getKey())).getValue();
+            String actionKey = actionTable.get(Pair.of(peek.statusNum,lexicals.get(prog.get(0)).name)) == null?null:actionTable.get(Pair.of(peek.statusNum,lexicals.get(prog.get(0)).name)).getKey();
+            int actionValue = actionTable.get(Pair.of(peek.statusNum,lexicals.get(prog.get(0)).name)) == null?-1:actionTable.get(Pair.of(peek.statusNum,lexicals.get(prog.get(0)).name)).getValue();
+
+            for (int i = symbolProduced.size()-1; i >= 0; i--) {
+                System.out.print(lexicals.get(symbolProduced.get(i)).identifier+" ");
+            }
+            System.out.println();
+
             //error
             if(actionKey == null){
-                prog.add(0,Pair.of(";",prog.get(0).getValue()));
-                System.out.println("语法错误，第"+Integer.toString(prog.get(0).getValue()-1)+"行，缺少"+"\""+";"+"\"");
+                System.out.println("语法错误");
                 continue;
             }
             //s shift
             else if(actionKey.equals("s")){
                 stack.push(collection.get(actionValue));
+                //移入prog首符号到处理过的符号表
+                symbolProduced.add(0, prog.get(0));
+                System.out.println("移入"+lexicals.get(symbolProduced.get(0)).identifier);
                 if(prog.size()>1)
-                   prog.remove(0);
+                    prog.remove(0);
+
+
             }
             //r reduction
             else if(actionKey.equals("r")){
@@ -564,14 +620,89 @@ public class Java_LRParserAnalysis
                 String[] rightItems = production.getValue().trim().split(" ");
                 //when right is null
                 boolean rightNotEqualsE = true;
-                if(rightItems.length==1 && rightItems[0].equals("E"))
+                if(rightItems.length==1 && rightItems[0].equals("E")) {
                     rightNotEqualsE = false;
+
+                    boolean notExist = true;
+                    for (int i = 0; i < lexicals.size(); i++) {
+                        if(lexicals.get(i).name.equals(production.getKey())){
+                            notExist = false;
+                            symbolProduced.add(0,i);
+                            System.out.println("遇空移入"+lexicals.get(symbolProduced.get(0)).identifier);
+                            break;
+                        }
+                    }
+                    if(notExist){
+                        lexicals.add(new Lexical(production.getKey(),production.getKey(),-1,"other",Float.MAX_VALUE));
+                        symbolProduced.add(0,lexicals.size()-1);
+                        System.out.println("遇空移入"+lexicals.get(symbolProduced.get(0)).identifier);
+                    }
+                }
                 for(int i=0;i<rightItems.length && rightNotEqualsE;i++){
                     stack.pop();
                 }
                 stack.push(collection.get(gotoTable.get(Pair.of(stack.peek().statusNum,production.getKey()))));
                 usedProduction.push(production);
-//                System.out.println(production.getKey()+"->"+production.getValue());
+
+                for (int i = 0; i < rightItems.length; i++) {
+                    System.out.println("移出"+lexicals.get(symbolProduced.get(0)).identifier);
+                    symbolProduced.remove(0);
+                }
+                boolean notExist = true;
+                for (int i = 0; i < lexicals.size(); i++) {
+                    if(lexicals.get(i).name.equals(production.getKey())){
+                        notExist = false;
+                        symbolProduced.add(0,i);
+                        System.out.println("移出后移入"+lexicals.get(symbolProduced.get(0)).identifier);
+                        break;
+                    }
+                }
+                if(notExist){
+                    lexicals.add(new Lexical(production.getKey(),production.getKey(),-1,"other",Float.MAX_VALUE));
+                    symbolProduced.add(0,lexicals.size()-1);
+                    System.out.println("移出后移入"+lexicals.get(symbolProduced.get(0)).identifier);
+                }
+
+                //处理符号表 并 更改需要更改的属性值
+//                switch (actionValue){
+//                    case 4:
+//                        //使用产生式4 decl -> int ID = INTNUM
+//                        //赋值语句类型不匹配
+//                        if(!lexicals.get(symbolProduced.get(0)).type.equals("INTNUM")){
+//                            System.out.println("error message:line 1,realnum can not be translated into int type");
+//                            break;
+//                        }
+//                        else{
+//                            lexicals.get(symbolProduced.get(2)).value = lexicals.get(symbolProduced.get(0)).value;
+//                        }
+//                        break;
+//                    case 5:
+//                        //使用产生式5 decl -> real ID = REALNUM
+//                        if(!lexicals.get(symbolProduced.get(0)).type.equals("REALNUM")){
+//                            System.out.println("error message:line 1,intnum can not be translated into real type");
+//                            break;
+//                        }
+//                        else{
+//                            lexicals.get(symbolProduced.get(2)).value = lexicals.get(symbolProduced.get(0)).value;
+//                        }
+//                        break;
+//                    case 13:
+//                        //使用产生式13 assgstmt -> ID = arithexpr ;
+//                        if(!lexicals.get(symbolProduced.get(1)).type.equals(lexicals.get(symbolProduced.get(3)).type)){
+//                            System.out.println("error message:line 1,intnum can not be translated into real type");
+//                            break;
+//                        }
+//                        else{
+//                            lexicals.get(symbolProduced.get(3)).value = lexicals.get(symbolProduced.get(1)).value;
+//                        }
+//                        break;
+//                    case 28:
+//
+//                    case 21:
+//                        //现在处理过的符号为......multexpr + multexpr arithexprprime
+//                        lexicals.get(symbolProduced.get())
+//                }
+
             }
             //acc
             else{

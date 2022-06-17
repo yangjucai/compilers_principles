@@ -382,25 +382,14 @@ public class Java_LLParserAnalysis {
      * 使用递归下降的语法分析方法
      */
 
-    private static void program(){
-        String[] grammar = {"compoundstmt"};
-        for(int i=0;i<grammar.length;i++){
-
-        }
-    }
-
-    private static void analysis_rec(){
-
-    }
-
     private static void stack_pop(Deque<String> stack, Deque<Integer>indents, List<Map.Entry<String,Integer>> grammarTree){
         grammarTree.add(Pair.of(stack.peek(), indents.peek()));
         stack.pop();
         indents.pop();
     }
     private static void analysis() {
-        Deque<String> stack = new LinkedList<>();
-        Deque<Integer> indents = new LinkedList<>();
+        Deque<String> stack = new ArrayDeque<>();
+        Deque<Integer> indents = new ArrayDeque<>();
         stack.push("$");
         indents.push(0);
         stack.push(start);
