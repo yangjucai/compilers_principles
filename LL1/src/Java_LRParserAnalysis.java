@@ -1,15 +1,15 @@
 import java.util.*;
 
-enum Status {
-    NOSEARCH, SEARCHING, SEARCHED
-}
-class Pair
-{
-    // Return a map entry (key-value pair) from the specified values
-    public static <T, U> Map.Entry<T, U> of(T first, U second) {
-        return new AbstractMap.SimpleEntry<>(first, second);
-    }
-}
+//enum Status {
+//    NOSEARCH, SEARCHING, SEARCHED
+//}
+//class Pair
+//{
+//    // Return a map entry (key-value pair) from the specified values
+//    public static <T, U> Map.Entry<T, U> of(T first, U second) {
+//        return new AbstractMap.SimpleEntry<>(first, second);
+//    }
+//}
 
 public class Java_LRParserAnalysis
 {
